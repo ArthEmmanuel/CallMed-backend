@@ -90,6 +90,6 @@ python -m py_compile app.py
 
 ## 📌 Status
 
-Backend funcional para integração local com o AgendaMed.
+Backend funcional para integração local com o Callmed(front).
 
 > Atualmente utiliza `db.json` para persistência local. Para produção, recomenda-se utilizar um banco de dados real e autenticação por token.
