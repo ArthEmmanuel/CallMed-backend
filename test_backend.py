@@ -38,6 +38,23 @@ class BackendTests(unittest.TestCase):
         self.assertIn('recomendacoes', resp.get_json())
         self.assertGreater(len(resp.get_json()['recomendacoes']), 0)
         self.assertEqual(resp.get_json()['recomendacoes'][0]['especialidade'], 'Cardiologia')
+        self.assertEqual(resp.get_json()['recomendacoes'][0]['prioridade'], 'especialidade_e_disponibilidade')
+
+    def test_matchmaking_accepts_frontend_fields_and_checks_availability(self):
+        resp = self.client.post('/api/matchmaking', json={
+            'pacienteId': '3',
+            'necessidade': 'dor no peito',
+            'sintomas': ['falta de ar'],
+            'data': '2026-09-22',
+            'hora': '14:00'
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()['recomendacoes'][0]['id'], 4)
+
+        disponibilidade = self.client.get('/api/medicos/2/disponibilidade?data=2025-10-15')
+        self.assertEqual(disponibilidade.status_code, 200)
+        horario = next(item for item in disponibilidade.get_json()['horarios'] if item['hora'] == '14:00')
+        self.assertFalse(horario['disponivel'])
 
     def test_historico_and_triagem_routes(self):
         historico = self.client.get('/api/historico')
@@ -119,6 +136,15 @@ class BackendTests(unittest.TestCase):
         })
         agendamento_id = novo_agendamento.get_json()['id']
         self.assertEqual(self.client.delete(f'/api/agenda/{agendamento_id}').status_code, 200)
+
+    def test_clinica_crud_contract(self):
+        criada = self.client.post('/api/clinicas', json={'nome': 'Clínica Teste'})
+        self.assertEqual(criada.status_code, 201)
+        clinica = criada.get_json()
+        atualizada = self.client.post('/api/clinicas', json={**clinica, 'nome': 'Clínica Atualizada'})
+        self.assertEqual(atualizada.status_code, 200)
+        self.assertEqual(atualizada.get_json()['nome'], 'Clínica Atualizada')
+        self.assertEqual(self.client.delete(f"/api/clinicas/{clinica['id']}").status_code, 200)
 
 
 if __name__ == '__main__':

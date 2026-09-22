@@ -145,6 +145,10 @@ MATCH_SPECIALTY_RULES = {
     "otorrinolaringologia": ["otorrino", "garganta", "nariz", "ouvido", "sinusite", "otite"],
     "neurologia": ["neurologia", "dor de cabeca", "enxaqueca", "tontura", "formigamento"],
     "endocrinologia": ["endocrinologia", "diabetes", "hormonal", "tireoide"],
+    "urologia": ["urologia", "urina", "urinario", "rim", "prostata", "calculo renal"],
+    "alergologia": ["alergologia", "alergia", "asma", "rinite alergica", "dermatite"],
+    "nutrologia": ["nutrologia", "alimentacao", "nutricao", "peso", "obesidade", "dieta"],
+    "geriatria": ["geriatria", "idoso", "envelhecimento", "quedas", "memoria"],
     "clinica geral": ["febre", "gripe", "resfriado", "dor", "mal estar", "cansaco", "rotina", "checkup"],
 }
 
@@ -153,6 +157,32 @@ def normalize_text(value):
     if value is None:
         return ""
     return str(value).strip().lower()
+
+
+def as_id(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def is_slot_available(medico_id, data, hora):
+    if not data or not hora:
+        return True
+
+    target = (as_id(medico_id), str(data), str(hora))
+    for appointment in DATA.get("agendamentos", []):
+        status = normalize_text(appointment.get("status"))
+        if status in {"cancelado", "cancelada", "concluido", "concluida"}:
+            continue
+        appointment_slot = (
+            as_id(appointment.get("medicoId", appointment.get("medico_id"))),
+            str(appointment.get("data", "")),
+            str(appointment.get("hora", appointment.get("horario", ""))),
+        )
+        if appointment_slot == target:
+            return False
+    return True
 
 
 def get_specialty_matches(necessidade, sintomas=None):
@@ -171,7 +201,7 @@ def get_specialty_matches(necessidade, sintomas=None):
         score = 0
         for keyword in keywords:
             if keyword in all_terms:
-                score += 20
+                score += 30 if keyword == normalize_text(necessidade) else 20
         if score > 0:
             matches.append((especialidade, score))
     if not matches:
@@ -181,7 +211,8 @@ def get_specialty_matches(necessidade, sintomas=None):
 
 def build_matchmaking_response(paciente_id, necessidade, sintomas=None, data=None, hora=None):
     pacientes = DATA.get("pacientes", [])
-    paciente = next((p for p in pacientes if p.get("id") == paciente_id), None)
+    paciente_id = as_id(paciente_id)
+    paciente = next((p for p in pacientes if as_id(p.get("id")) == paciente_id), None)
     if paciente is None:
         raise ValueError("Paciente não encontrado")
 
@@ -206,12 +237,18 @@ def build_matchmaking_response(paciente_id, necessidade, sintomas=None, data=Non
             score += 10
 
         if data and hora:
-            score += 10
+            disponivel = is_slot_available(medico.get("id"), data, hora)
+            if disponivel:
+                score += 40
+            else:
+                score -= 150
+        else:
+            disponivel = True
 
         if "status" in medico and str(medico.get("status", "")).lower() == "ativo":
             score += 5
 
-        if score > 0:
+        if score > 0 and disponivel:
             doctors.append({
                 "id": medico.get("id"),
                 "nome": medico.get("nome"),
@@ -220,15 +257,12 @@ def build_matchmaking_response(paciente_id, necessidade, sintomas=None, data=Non
                 "telefone": medico.get("telefone"),
                 "score": score,
                 "disponibilidade": {"data": data, "hora": hora},
+                "disponivel": disponivel,
+                "prioridade": "especialidade_e_disponibilidade" if data and hora else "especialidade",
                 "specialty_hits": specialty_hits,
             })
 
     doctors = sorted(doctors, key=lambda item: item["score"], reverse=True)
-    if doctors:
-        best_specific = next((d for d in doctors if "clinica geral" not in normalize_text(d["especialidade"])), None)
-        if best_specific:
-            doctors = [d for d in doctors if "clinica geral" not in normalize_text(d["especialidade"]) or d["id"] == best_specific["id"]]
-
     recommendations = doctors[:5]
 
     return {
@@ -376,6 +410,16 @@ def usuarios():
         "tipo": payload.get("tipo", "paciente"),
     }
     DATA["usuarios"].append(novo)
+    if novo["tipo"] == "paciente":
+        DATA.setdefault("pacientes", []).append({
+            "id": novo["id"],
+            "nome": nome,
+            "email": email,
+            "telefone": "",
+            "dataNascimento": "",
+            "usuarioId": novo["id"],
+            "status": "ativo",
+        })
     save_data()
     resposta = dict(novo)
     resposta.pop("senha", None)
@@ -493,6 +537,16 @@ def cadastro():
     }
 
     DATA["usuarios"].append(usuario)
+    if usuario["tipo"] == "paciente":
+        DATA.setdefault("pacientes", []).append({
+            "id": usuario["id"],
+            "nome": nome,
+            "email": email,
+            "telefone": "",
+            "dataNascimento": "",
+            "usuarioId": usuario["id"],
+            "status": "ativo",
+        })
     save_data()
     return jsonify({"mensagem": "Usuário criado", "usuario": sanitize_user(usuario)}), 201
 
@@ -540,9 +594,31 @@ def clinicas():
         return jsonify(DATA["clinicas"])
 
     payload = request.get_json(silent=True) or {}
-    DATA["clinicas"].append(payload)
+    clinica = dict(payload)
+    clinica_id = clinica.get("id")
+    if clinica_id is None:
+        clinica["id"] = max((item.get("id", 0) for item in DATA["clinicas"]), default=0) + 1
+        clinica.setdefault("status", "ativo")
+        DATA["clinicas"].append(clinica)
+    else:
+        for index, item in enumerate(DATA["clinicas"]):
+            if item.get("id") == clinica_id:
+                DATA["clinicas"][index] = {**item, **clinica}
+                break
+        else:
+            DATA["clinicas"].append(clinica)
     save_data()
-    return jsonify(payload), 201
+    return jsonify(clinica), 201 if clinica_id is None else 200
+
+
+@app.route("/api/clinicas/<int:clinica_id>", methods=["DELETE"])
+def excluir_clinica(clinica_id):
+    clinica = next((item for item in DATA["clinicas"] if item.get("id") == clinica_id), None)
+    if clinica is None:
+        return jsonify({"erro": "Clínica não encontrada"}), 404
+    DATA["clinicas"].remove(clinica)
+    save_data()
+    return jsonify({"mensagem": "Clínica excluída", "clinica": clinica})
 
 
 @app.route("/api/historico", methods=["GET", "POST"])
@@ -572,9 +648,9 @@ def config():
 @app.route("/api/matchmaking", methods=["POST"])
 def matchmaking():
     payload = request.get_json(silent=True) or {}
-    paciente_id = payload.get("paciente_id")
+    paciente_id = payload.get("paciente_id", payload.get("pacienteId"))
     necessidade = str(payload.get("necessidade", "")).strip()
-    sintomas = payload.get("sintomas", [])
+    sintomas = payload.get("sintomas", payload.get("sintoma", []))
     data = payload.get("data")
     hora = payload.get("hora")
 
@@ -594,7 +670,7 @@ def matchmaking():
 @app.route("/api/triagem", methods=["POST"])
 def triagem():
     payload = request.get_json(silent=True) or {}
-    paciente_id = payload.get("paciente_id")
+    paciente_id = payload.get("paciente_id", payload.get("pacienteId"))
     necessidade = str(payload.get("necessidade", "")).strip()
     sintomas = payload.get("sintomas", [])
 
@@ -603,8 +679,29 @@ def triagem():
     if not necessidade:
         return jsonify({"erro": "necessidade é obrigatória"}), 400
 
-    response = build_matchmaking_response(paciente_id, necessidade, sintomas)
+    try:
+        response = build_matchmaking_response(paciente_id, necessidade, sintomas)
+    except ValueError as exc:
+        return jsonify({"erro": str(exc)}), 404
     return jsonify(response), 200
+
+
+@app.route("/api/medicos/<int:medico_id>/disponibilidade", methods=["GET"])
+def disponibilidade_medico(medico_id):
+    medico = next((item for item in DATA.get("medicos", []) if as_id(item.get("id")) == medico_id), None)
+    if medico is None:
+        return jsonify({"erro": "Médico não encontrado"}), 404
+
+    data = request.args.get("data")
+    horarios = request.args.getlist("hora") or ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"]
+    return jsonify({
+        "medicoId": medico_id,
+        "data": data,
+        "horarios": [
+            {"hora": hora, "disponivel": is_slot_available(medico_id, data, hora)}
+            for hora in horarios
+        ],
+    })
 
 
 @app.route("/api/medicos/<int:medico_id>", methods=["GET", "DELETE"])

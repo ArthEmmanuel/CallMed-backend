@@ -58,6 +58,66 @@
 - Adicionada atualização de perfil por usuário.
 - Adicionada lógica de triagem e recomendação de médicos por especialidade.
 
+### Trabalho realizado em 2026-09-22
+
+#### Limpeza do banco local
+
+- Mantidos somente três logins essenciais:
+  - `admin@AgendaMed.com`
+  - `altemar@clinica.com`
+  - `sabrina@AgendaMed.com`
+- Removidos usuários duplicados criados durante os testes.
+- Removidos pacientes duplicados e agendamentos repetidos.
+- Mantidos dois médicos demo, um paciente, um agendamento e um histórico base.
+- Padronizados os campos do banco para o formato usado pelo frontend, como `pacienteId` e `medicoId`.
+
+#### Matchmaking prioritário
+
+- O fluxo principal passou a priorizar especialidade compatível e disponibilidade real:
+
+```text
+Necessidade -> Triagem -> Matchmaking -> Disponibilidade -> Agendamento
+```
+
+- Médicos com horário ocupado não são recomendados para aquele horário.
+- Médicos ativos recebem prioridade adicional.
+- O retorno informa a prioridade aplicada, como `especialidade_e_disponibilidade`.
+- Ampliado o reconhecimento de necessidades para Urologia, Alergologia, Nutrologia e Geriatria.
+- Matchmaking passou a aceitar `pacienteId` e `paciente_id`.
+- Triagem passou a aceitar os mesmos formatos de identificação.
+- Corrigido erro 500 causado por uma referência antiga à lista de horários ocupados.
+
+#### Disponibilidade e clínicas
+
+- Criada a rota `GET /api/medicos/<id>/disponibilidade`.
+- A rota informa horários disponíveis e ocupados por data.
+- Implementada atualização de clínicas existentes.
+- Criada a exclusão de clínicas com `DELETE /api/clinicas/<id>`.
+- Conectado o CRUD de clínicas do frontend à API.
+
+#### Limpeza e conexão do frontend
+
+- Removido código demo desativado do `js/app.js`.
+- Corrigido o CRUD de clínicas para aguardar operações assíncronas.
+- Criado `Storage.buscarTriagem()`.
+- Criado `Storage.buscarMatchmakingPrioritario()`.
+- A agenda passou a enviar nomes e especialidades do paciente e do médico.
+- O frontend passou a disparar `storageReady` após carregar os dados da API.
+
+#### Validação realizada hoje
+
+- Banco validado com 3 usuários, 1 paciente e 1 agendamento.
+- Login do paciente validado com status `200`.
+- Matchmaking validado com status `200`, retornando Cardiologia para dor no peito e falta de ar.
+- `app.py` validado com `py_compile`.
+- Frontend validado com `node --check`.
+- Suíte atualizada para 9 testes e resultado final:
+
+```text
+Ran 9 tests
+OK
+```
+
 ### Testes e validações
 
 - Criado e atualizado `test_backend.py`.
@@ -65,7 +125,7 @@
 - Última execução registrada:
 
 ```text
-Ran 7 tests
+Ran 9 tests
 OK
 ```
 
