@@ -27,8 +27,8 @@ DEFAULT_DATA = {
         },
         {
             "id": 3,
-            "nome": "João da Silva",
-            "email": "joao@AgendaMed.com",
+            "nome": "Sabrina",
+            "email": "sabrina@AgendaMed.com",
             "senha": "123456",
             "tipo": "paciente",
         },
@@ -56,10 +56,10 @@ DEFAULT_DATA = {
     "pacientes": [
         {
             "id": 3,
-            "nome": "João da Silva",
+            "nome": "Sabrina",
             "data_nascimento": "1990-04-12",
             "telefone": "(11) 98888-8888",
-            "email": "joao@AgendaMed.com",
+            "email": "sabrina@AgendaMed.com",
             "status": "ativo",
         }
     ],

@@ -90,7 +90,7 @@ class BackendTests(unittest.TestCase):
             'data': '2026-09-25',
             'hora': '16:30',
             'status': 'agendado',
-            'pacienteNome': 'João da Silva',
+            'pacienteNome': 'Sabrina',
             'medicoNome': 'Dr. Altemar',
             'medicoEspecialidade': 'Clínica Geral'
         })
