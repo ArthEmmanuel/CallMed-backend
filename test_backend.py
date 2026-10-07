@@ -1,12 +1,21 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from app import app
+from app import create_app
+from repositories import JsonRepository
 
 
 class BackendTests(unittest.TestCase):
     def setUp(self):
-        self.client = app.test_client()
+        self.temp_dir = TemporaryDirectory()
+        repository = JsonRepository(Path(self.temp_dir.name) / 'db.json')
+        self.app = create_app(repository=repository)
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
 
     def test_health(self):
         resp = self.client.get('/api/health')

@@ -2,12 +2,17 @@
 
 Backend da **CallMed**, desenvolvido em Python com Flask para gerenciamento de usuários, médicos, pacientes, clínicas e consultas.
 
+O backend contém a API e as regras de negócio. A persistência JSON é apenas um
+adaptador local temporário; não representa nem substitui o projeto separado de
+banco de dados. A integração com esse projeto será implementada no repository
+quando seu protocolo real estiver disponível.
+
 ## 🚀 Tecnologias
 
 * Python 3
 * Flask
 * Flask-CORS
-* JSON
+* `db.json` para desenvolvimento local
 * unittest
 
 ## ✨ Funcionalidades
@@ -39,6 +44,9 @@ pip install -r requirements.txt
 ```
 
 ## ▶️ Executando
+
+Copie `.env.example` para `.env` para personalizar as configurações locais.
+O arquivo `.env` não deve ser versionado.
 
 ```bash
 python app.py
@@ -88,8 +96,15 @@ Validação da sintaxe:
 python -m py_compile app.py
 ```
 
-## 📌 Status
+## ⚙️ Configuração
 
-Backend funcional para integração local com o Callmed(front).
+| Variável | Padrão | Uso |
+| --- | --- | --- |
+| `API_HOST` | `0.0.0.0` | Endereço de escuta do servidor de desenvolvimento |
+| `API_PORT` | `5000` | Porta do servidor |
+| `FLASK_DEBUG` | `true` | Modo de depuração local |
+| `CORS_ORIGINS` | `*` | Origens CORS; múltiplas origens podem ser separadas por vírgula |
+| `DATA_FILE` | `db.json` | Caminho do arquivo usado pelo repository JSON local |
 
-> Atualmente utiliza `db.json` para persistência local. Para produção, recomenda-se utilizar um banco de dados real e autenticação por token.
+Não há configuração de conexão com o banco separado neste projeto: o código
+atual não informa protocolo, URL, credenciais ou tecnologia desse serviço.
