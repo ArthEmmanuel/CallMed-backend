@@ -57,12 +57,11 @@ class UserService:
             "senha": senha,
             "tipo": normalized.get("tipo", payload.get("tipo", "paciente")),
         }
-        users.append(user)
-        changes = {"usuarios": users}
+        self.repository.insert("usuarios", user)
 
         if user["tipo"] == "paciente":
-            patients = self.repository.get_all("pacientes")
-            patients.append(
+            self.repository.insert(
+                "pacientes",
                 {
                     "id": user_id,
                     "nome": nome,
@@ -71,11 +70,8 @@ class UserService:
                     "dataNascimento": "",
                     "usuarioId": user_id,
                     "status": "ativo",
-                }
+                },
             )
-            changes["pacientes"] = patients
-
-        self.repository.save_changes(changes)
         return sanitize_user(user)
 
     def get_profile(self, user_id):
@@ -105,13 +101,7 @@ class UserService:
             if field in normalized:
                 user[field] = normalized[field]
 
-        changes = {}
-        users = self.repository.get_all("usuarios")
-        for index, item in enumerate(users):
-            if item.get("id") == user_id:
-                users[index] = user
-                break
-        changes["usuarios"] = users
+        self.repository.replace("usuarios", user)
 
         if patient:
             for field in ("telefone", "dataNascimento", "data_nascimento"):
@@ -123,14 +113,8 @@ class UserService:
                             if field == "dataNascimento"
                             else "dataNascimento"
                         ] = normalized[field]
-            patients = self.repository.get_all("pacientes")
-            for index, item in enumerate(patients):
-                if item.get("id") == patient.get("id"):
-                    patients[index] = patient
-                    break
-            changes["pacientes"] = patients
+            self.repository.replace("pacientes", patient)
 
-        self.repository.save_changes(changes)
         return merge_profile(user, patient)
 
     def _find_user(self, user_id):

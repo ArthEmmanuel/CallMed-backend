@@ -1,4 +1,4 @@
 from repositories.data_repository import DataRepository
-from repositories.json_repository import JsonRepository
+from repositories.mongo_repository import MongoRepository
 
-__all__ = ["DataRepository", "JsonRepository"]
+__all__ = ["DataRepository", "MongoRepository"]

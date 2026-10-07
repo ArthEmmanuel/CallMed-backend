@@ -3,7 +3,7 @@ from flask_cors import CORS
 
 from config import load_config
 from controllers import ApiController
-from repositories import JsonRepository
+from repositories import MongoRepository
 from routes import (
     create_appointment_blueprint,
     create_directory_blueprint,
@@ -31,7 +31,10 @@ def create_app(config_overrides=None, repository=None):
         resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}},
     )
 
-    data_repository = repository or JsonRepository(app.config["DATA_FILE"])
+    data_repository = repository or MongoRepository(
+        app.config["MONGO_URI"],
+        app.config["DB_NAME"],
+    )
     appointments = AppointmentService(data_repository)
     controller = ApiController(
         users=UserService(data_repository),

@@ -36,11 +36,15 @@ class AppointmentService:
             appointment["id"] = (
                 max((item.get("id", 0) for item in records), default=0) + 1
             )
-            records.append(appointment)
+            self.repository.insert("agendamentos", appointment)
         else:
-            self._upsert(records, appointment, appointment_id)
+            existing = next(
+                (item for item in records if item.get("id") == appointment_id),
+                {},
+            )
+            appointment = {**existing, **appointment}
+            self.repository.replace("agendamentos", appointment)
 
-        self.repository.save_all("agendamentos", records)
         return normalize_appointment(appointment), 201 if not appointment_id else 200
 
     def create_legacy_appointment(self, payload):
@@ -50,20 +54,21 @@ class AppointmentService:
             "id",
             max((item.get("id", 0) for item in records), default=0) + 1,
         )
-        records.append(appointment)
-        self.repository.save_all("agendamentos", records)
+        self.repository.insert("agendamentos", appointment)
         return normalize_appointment(appointment)
 
     def delete_appointment(self, appointment_id):
-        records = self.repository.get_all("agendamentos")
         appointment = next(
-            (item for item in records if item.get("id") == appointment_id),
+            (
+                item
+                for item in self.repository.get_all("agendamentos")
+                if item.get("id") == appointment_id
+            ),
             None,
         )
         if appointment is None:
             raise ServiceError("Agendamento não encontrado", 404)
-        records.remove(appointment)
-        self.repository.save_all("agendamentos", records)
+        self.repository.delete("agendamentos", appointment_id)
         return {
             "mensagem": "Agendamento excluído",
             "agendamento": normalize_appointment(appointment),
@@ -102,11 +107,3 @@ class AppointmentService:
                 for hour in (hours or DEFAULT_SLOTS)
             ],
         }
-
-    @staticmethod
-    def _upsert(records, record, record_id):
-        for index, item in enumerate(records):
-            if item.get("id") == record_id:
-                records[index] = {**item, **record}
-                return
-        records.append(record)

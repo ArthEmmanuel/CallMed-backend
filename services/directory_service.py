@@ -17,10 +17,14 @@ class DirectoryService:
         if record_id is None:
             record["id"] = max((item.get("id", 0) for item in records), default=0) + 1
             record.setdefault("status", "ativo")
-            records.append(record)
+            self.repository.insert(collection, record)
         else:
-            self._upsert(records, record, record_id)
-        self.repository.save_all(collection, records)
+            existing = next(
+                (item for item in records if item.get("id") == record_id),
+                {},
+            )
+            record = {**existing, **record}
+            self.repository.replace(collection, record)
         if truthy_status:
             status_code = 201 if not record_id else 200
         else:
@@ -40,28 +44,20 @@ class DirectoryService:
             raise ServiceError(f"{label} não encontrado", 404)
         return record
 
-    def get_doctor(self, doctor_id):
-        doctor = next(
-            (
-                item
-                for item in self.repository.get_all("medicos")
-                if item.get("id") == doctor_id
-            ),
-            None,
-        )
-        if doctor is None:
-            raise ServiceError("Médico não encontrado", 404)
-        return doctor
-
     def delete_record(
         self, collection, record_id, label, response_key=None, message=None
     ):
-        records = self.repository.get_all(collection)
-        record = next((item for item in records if item.get("id") == record_id), None)
+        record = next(
+            (
+                item
+                for item in self.repository.get_all(collection)
+                if item.get("id") == record_id
+            ),
+            None,
+        )
         if record is None:
             raise ServiceError(f"{label} não encontrado", 404)
-        records.remove(record)
-        self.repository.save_all(collection, records)
+        self.repository.delete(collection, record_id)
         if response_key:
             return {"mensagem": message or f"{label} excluído", response_key: record}
         return {"mensagem": message or f"{label} excluído"}
@@ -73,8 +69,7 @@ class DirectoryService:
         records = self.repository.get_all("historico")
         record = dict(payload)
         record["id"] = max((item.get("id", 0) for item in records), default=0) + 1
-        records.append(record)
-        self.repository.save_all("historico", records)
+        self.repository.insert("historico", record)
         return record
 
     def get_settings(self):
@@ -85,14 +80,6 @@ class DirectoryService:
         settings.update(payload)
         self.repository.save_document("config", settings)
         return settings
-
-    @staticmethod
-    def _upsert(records, record, record_id):
-        for index, item in enumerate(records):
-            if item.get("id") == record_id:
-                records[index] = {**item, **record}
-                return
-        records.append(record)
 
     def get_doctor_for_availability(self, doctor_id):
         doctor = next(

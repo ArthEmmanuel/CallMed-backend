@@ -1,21 +1,133 @@
+import os
 import unittest
-from pathlib import Path
-from tempfile import TemporaryDirectory
+from copy import deepcopy
+from unittest.mock import MagicMock, call, patch
 from uuid import uuid4
 
-from app import create_app
-from repositories import JsonRepository
+with patch.dict(os.environ, {"MONGO_URI": "mongodb://127.0.0.1:27017"}):
+    from app import create_app
+
+from repositories.mongo_repository import MongoRepository
+
+
+class InMemoryRepository:
+    def __init__(self):
+        self.collections = {
+            "usuarios": [
+                {
+                    "id": 1,
+                    "nome": "Admin",
+                    "email": "admin@AgendaMed.com",
+                    "senha": "123456",
+                    "tipo": "clinica",
+                    "tipoClinica": "admin",
+                },
+                {
+                    "id": 2,
+                    "nome": "Dr. Altemar",
+                    "email": "altemar@clinica.com",
+                    "senha": "123456",
+                    "tipo": "clinica",
+                    "tipoClinica": "medico",
+                },
+                {
+                    "id": 3,
+                    "nome": "Sabrina",
+                    "email": "sabrina@AgendaMed.com",
+                    "senha": "123456",
+                    "tipo": "paciente",
+                },
+            ],
+            "medicos": [
+                {
+                    "id": 2,
+                    "nome": "Dr. Altemar",
+                    "especialidade": "Clínica Geral",
+                    "crm": "123456-SP",
+                    "telefone": "(11) 99999-9999",
+                    "email": "altemar@clinica.com",
+                    "status": "ativo",
+                },
+                {
+                    "id": 4,
+                    "nome": "Dra. Ana Souza",
+                    "especialidade": "Cardiologia",
+                    "crm": "654321-SP",
+                    "telefone": "(11) 98888-7777",
+                    "email": "ana@AgendaMed.com",
+                    "status": "ativo",
+                },
+            ],
+            "pacientes": [
+                {
+                    "id": 3,
+                    "nome": "Sabrina",
+                    "data_nascimento": "1990-04-12",
+                    "telefone": "(11) 98888-9999",
+                    "email": "sabrina@AgendaMed.com",
+                    "usuarioId": 3,
+                    "status": "ativo",
+                }
+            ],
+            "agendamentos": [
+                {
+                    "id": 1,
+                    "paciente_id": 3,
+                    "medico_id": 2,
+                    "data": "2025-10-15",
+                    "hora": "14:00",
+                    "status": "Confirmado",
+                }
+            ],
+            "clinicas": [],
+            "logs": [
+                {
+                    "id": 1,
+                    "paciente_id": 3,
+                    "medico_id": 2,
+                    "data": "2025-09-20",
+                    "descricao": "Consulta de rotina.",
+                }
+            ],
+        }
+        self.documents = {
+            "configuracoes": {"tema": "light", "notificacoes": True}
+        }
+
+    def get_all(self, collection):
+        return deepcopy(self.collections.get(collection, []))
+
+    def insert(self, collection, record):
+        self.collections.setdefault(collection, []).append(deepcopy(record))
+
+    def replace(self, collection, record):
+        records = self.collections.setdefault(collection, [])
+        for index, existing in enumerate(records):
+            if existing.get("id") == record.get("id"):
+                records[index] = deepcopy(record)
+                return
+        records.append(deepcopy(record))
+
+    def delete(self, collection, record_id):
+        records = self.collections.setdefault(collection, [])
+        for record in records:
+            if record.get("id") == record_id:
+                records.remove(record)
+                return True
+        return False
+
+    def get_document(self, collection):
+        return deepcopy(self.documents.get(collection, {}))
+
+    def save_document(self, collection, document):
+        self.documents[collection] = deepcopy(document)
 
 
 class BackendTests(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = TemporaryDirectory()
-        repository = JsonRepository(Path(self.temp_dir.name) / 'db.json')
+        repository = InMemoryRepository()
         self.app = create_app(repository=repository)
         self.client = self.app.test_client()
-
-    def tearDown(self):
-        self.temp_dir.cleanup()
 
     def test_health(self):
         resp = self.client.get('/api/health')
@@ -99,7 +211,7 @@ class BackendTests(unittest.TestCase):
             'data': '2026-09-25',
             'hora': '16:30',
             'status': 'agendado',
-            'pacienteNome': 'João da Silva',
+            'pacienteNome': 'Sabrina',
             'medicoNome': 'Dr. Altemar',
             'medicoEspecialidade': 'Clínica Geral'
         })
@@ -154,6 +266,74 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(atualizada.status_code, 200)
         self.assertEqual(atualizada.get_json()['nome'], 'Clínica Atualizada')
         self.assertEqual(self.client.delete(f"/api/clinicas/{clinica['id']}").status_code, 200)
+
+
+class MongoRepositoryTests(unittest.TestCase):
+    def setUp(self):
+        self.client = MagicMock()
+        self.database = MagicMock()
+        self.collection = MagicMock()
+        self.client.__getitem__.return_value = self.database
+        self.database.__getitem__.return_value = self.collection
+
+        with patch(
+            "repositories.mongo_repository.MongoClient",
+            return_value=self.client,
+        ):
+            self.repository = MongoRepository(
+                "mongodb://localhost:27017",
+                "callmed",
+            )
+
+    def test_requires_mongo_uri(self):
+        with self.assertRaisesRegex(RuntimeError, "MONGO_URI"):
+            MongoRepository("", "callmed")
+
+    def test_lists_records_from_existing_database_collections(self):
+        self.collection.find.return_value = [
+            {"_id": "mongo-id", "id": 7, "nome": "Médico"}
+        ]
+
+        records = self.repository.get_all("medicos")
+
+        self.assertEqual(records, [{"id": 7, "nome": "Médico"}])
+        self.assertEqual(self.database.__getitem__.call_args, call("medicos"))
+
+    def test_maps_api_history_and_settings_to_existing_collections(self):
+        self.repository.get_all("historico")
+        self.assertEqual(self.database.__getitem__.call_args, call("logs"))
+
+        self.collection.find_one.return_value = None
+        self.repository.get_document("config")
+        self.assertEqual(
+            self.database.__getitem__.call_args,
+            call("configuracoes"),
+        )
+
+    def test_updates_the_existing_global_settings_document(self):
+        self.collection.find_one.return_value = {"_id": "settings-id"}
+        settings = {"tema": "dark", "notificacoes": False}
+
+        self.repository.save_document("config", settings)
+
+        self.collection.update_one.assert_called_once_with(
+            {"_id": "settings-id"},
+            {"$set": settings},
+        )
+
+    def test_updates_and_deletes_only_the_record_with_matching_numeric_id(self):
+        record = {"id": 12, "nome": "Dra. Nova"}
+
+        self.repository.replace("medicos", record)
+        self.collection.replace_one.assert_called_once_with(
+            {"id": 12},
+            record,
+            upsert=True,
+        )
+
+        self.collection.delete_one.return_value.deleted_count = 1
+        self.assertTrue(self.repository.delete("medicos", 12))
+        self.collection.delete_one.assert_called_once_with({"id": 12})
 
 
 if __name__ == '__main__':

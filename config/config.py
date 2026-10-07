@@ -10,11 +10,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 def load_config():
     load_dotenv(BASE_DIR / ".env")
 
-    configured_data_file = os.getenv("DATA_FILE", "db.json")
-    data_file = Path(configured_data_file)
-    if not data_file.is_absolute():
-        data_file = BASE_DIR / data_file
-
     origins = os.getenv("CORS_ORIGINS", "*")
     if origins != "*":
         origins = [origin.strip() for origin in origins.split(",") if origin.strip()]
@@ -24,5 +19,6 @@ def load_config():
         "API_PORT": int(os.getenv("API_PORT", "5000")),
         "DEBUG": os.getenv("FLASK_DEBUG", "true").lower() in {"1", "true", "yes"},
         "CORS_ORIGINS": origins,
-        "DATA_FILE": data_file,
+        "MONGO_URI": os.getenv("MONGO_URI"),
+        "DB_NAME": os.getenv("DB_NAME", "callmed"),
     }
