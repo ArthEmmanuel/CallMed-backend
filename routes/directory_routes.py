@@ -13,7 +13,7 @@ def create_directory_blueprint(controller):
         "/api/medicos/<int:doctor_id>",
         "doctor_by_id",
         controller.doctor_by_id,
-        methods=["GET", "DELETE"],
+        methods=["GET", "PUT", "DELETE"],
     )
     blueprint.add_url_rule(
         "/api/pacientes",
@@ -25,7 +25,7 @@ def create_directory_blueprint(controller):
         "/api/pacientes/<int:patient_id>",
         "patient_by_id",
         controller.patient_by_id,
-        methods=["GET", "DELETE"],
+        methods=["GET", "PUT", "DELETE"],
     )
     blueprint.add_url_rule(
         "/api/clinicas",

@@ -44,6 +44,13 @@ class DirectoryService:
             raise ServiceError(f"{label} não encontrado", 404)
         return record
 
+    def update_record(self, collection, record_id, payload, label):
+        record = self.get_record(collection, record_id, label)
+        record.update(payload)
+        record["id"] = record_id
+        self.repository.replace(collection, record)
+        return record
+
     def delete_record(
         self, collection, record_id, label, response_key=None, message=None
     ):

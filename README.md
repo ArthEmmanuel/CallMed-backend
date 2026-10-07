@@ -95,15 +95,18 @@ backend. Ele não é removido automaticamente.
 | `POST` | `/api/cadastro` | Cadastro; aceita os aliases de perfil |
 | `GET`, `POST` | `/api/usuarios` | Lista ou cria usuários |
 | `GET` | `/api/usuarios/<id>` | Consulta um usuário |
+| `GET`, `POST` | `/api/administradores` | Lista ou cria usuários administradores |
+| `GET`, `PUT`, `DELETE` | `/api/administradores/<admin_id>` | Consulta, atualiza ou exclui administrador |
 | `GET`, `PUT` | `/api/perfil/<usuario_id>` | Consulta ou atualiza perfil |
-| `GET`, `POST` | `/api/medicos` | Lista ou cria/atualiza médicos |
-| `GET`, `DELETE` | `/api/medicos/<medico_id>` | Consulta ou exclui médico |
+| `GET`, `POST` | `/api/medicos` | Lista ou cria médico; POST com `id` atualiza |
+| `GET`, `PUT`, `DELETE` | `/api/medicos/<medico_id>` | Consulta, atualiza ou exclui médico |
 | `GET` | `/api/medicos/<medico_id>/disponibilidade` | Consulta horários; aceita `data` e parâmetros repetidos `hora` |
-| `GET`, `POST` | `/api/pacientes` | Lista ou cria/atualiza pacientes |
-| `GET`, `DELETE` | `/api/pacientes/<paciente_id>` | Consulta ou exclui paciente |
+| `GET`, `POST` | `/api/pacientes` | Lista ou cria paciente; POST com `id` atualiza |
+| `GET`, `PUT`, `DELETE` | `/api/pacientes/<paciente_id>` | Consulta, atualiza ou exclui paciente |
 | `GET`, `POST` | `/api/clinicas` | Lista, cria ou atualiza clínicas |
 | `DELETE` | `/api/clinicas/<clinica_id>` | Exclui clínica |
 | `GET`, `POST` | `/api/agendamentos` | Lista, cria ou atualiza agendamentos |
+| `GET`, `PUT`, `DELETE` | `/api/agendamentos/<agendamento_id>` | Consulta, atualiza ou exclui agendamento |
 | `GET`, `POST` | `/api/agenda` | Compatibilidade com a agenda legada do frontend |
 | `DELETE` | `/api/agenda/<agendamento_id>` | Exclui agendamento |
 | `GET`, `POST` | `/api/historico` | Lista ou adiciona histórico em `logs` |
@@ -116,6 +119,23 @@ IDs nas rotas são inteiros. `POST /api/matchmaking` aceita `paciente_id` ou
 `necessidade`. A disponibilidade no matchmaking recebe `data` e `hora`
 opcionais. As respostas mantêm os campos e formatos usados pelo frontend,
 inclusive os aliases camelCase/snake_case de agendamentos e perfis.
+
+Administradores são registros da collection `usuarios` com `tipoClinica:
+admin` (ou `tipo: admin`). A criação por `/api/administradores` define
+`tipo: clinica` e `tipoClinica: admin`; respostas de usuário nunca incluem
+`senha`. O endpoint `/api/perfil/<usuario_id>` segue disponível para o
+contrato existente do frontend.
+
+O cadastro em `/api/cadastro` grava o usuário em `usuarios` e, para contas
+`paciente`, cria também o perfil em `pacientes`. O agendamento exige IDs de
+paciente e médico existentes, data e horário; os nomes/telefone/especialidade
+são preenchidos a partir dos cadastros e o horário ocupado retorna `409`.
+Criar ou atualizar usa `/api/agendamentos`; a rota `/api/agenda` permanece
+compatível com o frontend legado.
+
+**Atenção:** a API atualmente não possui autenticação/autorização por token.
+As rotas CRUD, inclusive as de administrador, não devem ser expostas
+publicamente até que uma camada de autenticação e autorização seja adicionada.
 
 ### Exemplo de requisição
 

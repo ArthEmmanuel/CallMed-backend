@@ -10,6 +10,12 @@ def create_appointment_blueprint(controller):
         methods=["GET", "POST"],
     )
     blueprint.add_url_rule(
+        "/api/agendamentos/<int:appointment_id>",
+        "appointment_by_id",
+        controller.appointment_by_id,
+        methods=["GET", "PUT", "DELETE"],
+    )
+    blueprint.add_url_rule(
         "/api/agenda",
         "legacy_agenda",
         controller.legacy_agenda,

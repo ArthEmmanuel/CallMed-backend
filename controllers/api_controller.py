@@ -49,6 +49,24 @@ class ApiController:
     def user_by_id(self, user_id):
         return jsonify(self.users.get_user(user_id))
 
+    def admins_collection(self):
+        if request.method == "GET":
+            return jsonify(self.users.list_admins())
+        admin = self.users.create_admin(request.get_json(silent=True) or {})
+        return jsonify(
+            {"mensagem": "Administrador criado", "administrador": admin}
+        ), 201
+
+    def admin_by_id(self, admin_id):
+        if request.method == "GET":
+            return jsonify(self.users.get_admin(admin_id))
+        if request.method == "PUT":
+            admin = self.users.update_admin(
+                admin_id, request.get_json(silent=True) or {}
+            )
+            return jsonify(admin)
+        return jsonify(self.users.delete_admin(admin_id))
+
     def register(self):
         payload = request.get_json(silent=True) or {}
         user = self.users.create_user(payload, frontend_fields=True)
@@ -81,12 +99,30 @@ class ApiController:
             return jsonify(
                 self.directory.delete_record("medicos", doctor_id, "Médico")
             )
+        if request.method == "PUT":
+            return jsonify(
+                self.directory.update_record(
+                    "medicos",
+                    doctor_id,
+                    request.get_json(silent=True) or {},
+                    "Médico",
+                )
+            )
         return jsonify(self.directory.get_record("medicos", doctor_id, "Médico"))
 
     def patient_by_id(self, patient_id):
         if request.method == "DELETE":
             return jsonify(
                 self.directory.delete_record("pacientes", patient_id, "Paciente")
+            )
+        if request.method == "PUT":
+            return jsonify(
+                self.directory.update_record(
+                    "pacientes",
+                    patient_id,
+                    request.get_json(silent=True) or {},
+                    "Paciente",
+                )
             )
         return jsonify(
             self.directory.get_record("pacientes", patient_id, "Paciente")
@@ -132,6 +168,18 @@ class ApiController:
             request.get_json(silent=True) or {}
         )
         return jsonify(appointment), status
+
+    def appointment_by_id(self, appointment_id):
+        if request.method == "GET":
+            return jsonify(self.appointments.get_appointment(appointment_id))
+        if request.method == "PUT":
+            appointment, status = self.appointments.save_appointment(
+                request.get_json(silent=True) or {},
+                appointment_id=appointment_id,
+                require_existing=True,
+            )
+            return jsonify(appointment), status
+        return jsonify(self.appointments.delete_appointment(appointment_id))
 
     def legacy_agenda(self):
         if request.method == "GET":

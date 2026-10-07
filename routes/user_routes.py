@@ -17,6 +17,18 @@ def create_user_blueprint(controller):
         methods=["GET"],
     )
     blueprint.add_url_rule(
+        "/api/administradores",
+        "admins_collection",
+        controller.admins_collection,
+        methods=["GET", "POST"],
+    )
+    blueprint.add_url_rule(
+        "/api/administradores/<int:admin_id>",
+        "admin_by_id",
+        controller.admin_by_id,
+        methods=["GET", "PUT", "DELETE"],
+    )
+    blueprint.add_url_rule(
         "/api/cadastro", "register", controller.register, methods=["POST"]
     )
     blueprint.add_url_rule(

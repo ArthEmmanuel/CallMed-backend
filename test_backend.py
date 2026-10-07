@@ -147,6 +147,135 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIsInstance(resp.get_json(), list)
 
+    def test_patient_and_doctor_update(self):
+        patient = self.client.put(
+            '/api/pacientes/3',
+            json={'telefone': '(11) 90000-0000', 'id': 999},
+        )
+        self.assertEqual(patient.status_code, 200)
+        self.assertEqual(patient.get_json()['id'], 3)
+        self.assertEqual(patient.get_json()['telefone'], '(11) 90000-0000')
+
+        doctor = self.client.put(
+            '/api/medicos/2',
+            json={'especialidade': 'Pediatria', 'id': 999},
+        )
+        self.assertEqual(doctor.status_code, 200)
+        self.assertEqual(doctor.get_json()['id'], 2)
+        self.assertEqual(doctor.get_json()['nome'], 'Dr. Altemar')
+        self.assertEqual(doctor.get_json()['especialidade'], 'Pediatria')
+
+    def test_complete_appointment_crud_and_conflict_validation(self):
+        created = self.client.post(
+            '/api/agendamentos',
+            json={
+                'pacienteId': 3,
+                'medicoId': 4,
+                'data': '2026-10-20',
+                'hora': '09:30',
+                'observacoes': 'Consulta de acompanhamento',
+            },
+        )
+        self.assertEqual(created.status_code, 201)
+        appointment = created.get_json()
+        appointment_id = appointment['id']
+        self.assertEqual(appointment['pacienteNome'], 'Sabrina')
+        self.assertEqual(appointment['medicoNome'], 'Dra. Ana Souza')
+        self.assertEqual(appointment['status'], 'agendado')
+
+        fetched = self.client.get(f'/api/agendamentos/{appointment_id}')
+        self.assertEqual(fetched.status_code, 200)
+        self.assertEqual(fetched.get_json()['id'], appointment_id)
+
+        conflict = self.client.post(
+            '/api/agenda',
+            json={
+                'pacienteId': 3,
+                'medicoId': 4,
+                'data': '2026-10-20',
+                'hora': '09:30',
+            },
+        )
+        self.assertEqual(conflict.status_code, 409)
+
+        updated = self.client.put(
+            f'/api/agendamentos/{appointment_id}',
+            json={'status': 'confirmado'},
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.get_json()['observacoes'], 'Consulta de acompanhamento')
+        self.assertEqual(updated.get_json()['status'], 'confirmado')
+
+        deleted = self.client.delete(f'/api/agendamentos/{appointment_id}')
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(
+            self.client.get(f'/api/agendamentos/{appointment_id}').status_code,
+            404,
+        )
+
+    def test_appointment_requires_existing_patient_doctor_and_slot(self):
+        missing_fields = self.client.post('/api/agendamentos', json={})
+        self.assertEqual(missing_fields.status_code, 400)
+
+        missing_patient = self.client.post(
+            '/api/agendamentos',
+            json={
+                'pacienteId': 999,
+                'medicoId': 4,
+                'data': '2026-10-20',
+                'hora': '09:30',
+            },
+        )
+        self.assertEqual(missing_patient.status_code, 404)
+
+        missing_doctor = self.client.post(
+            '/api/agendamentos',
+            json={
+                'pacienteId': 3,
+                'medicoId': 999,
+                'data': '2026-10-20',
+                'hora': '09:30',
+            },
+        )
+        self.assertEqual(missing_doctor.status_code, 404)
+
+    def test_admin_crud(self):
+        admins = self.client.get('/api/administradores')
+        self.assertEqual(admins.status_code, 200)
+        self.assertEqual([item['id'] for item in admins.get_json()], [1])
+        self.assertNotIn('senha', admins.get_json()[0])
+
+        created = self.client.post(
+            '/api/administradores',
+            json={
+                'nome': 'Admin novo',
+                'email': f'admin-{uuid4().hex}@example.com',
+                'senha': 'senha-segura',
+            },
+        )
+        self.assertEqual(created.status_code, 201)
+        admin = created.get_json()['administrador']
+        self.assertEqual(admin['tipoClinica'], 'admin')
+        self.assertNotIn('senha', admin)
+
+        updated = self.client.put(
+            f"/api/administradores/{admin['id']}",
+            json={'nome': 'Admin atualizado'},
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.get_json()['nome'], 'Admin atualizado')
+
+        fetched = self.client.get(f"/api/administradores/{admin['id']}")
+        self.assertEqual(fetched.status_code, 200)
+        self.assertNotIn('senha', fetched.get_json())
+
+        deleted = self.client.delete(f"/api/administradores/{admin['id']}")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(
+            self.client.get(f"/api/administradores/{admin['id']}").status_code,
+            404,
+        )
+
     def test_matchmaking(self):
         resp = self.client.post('/api/matchmaking', json={
             'paciente_id': 3,
@@ -204,6 +333,14 @@ class BackendTests(unittest.TestCase):
         })
         self.assertEqual(cadastro.status_code, 201)
         self.assertIn('usuario', cadastro.get_json())
+        self.assertIn(
+            email.lower(),
+            [user['email'].lower() for user in self.client.get('/api/usuarios').get_json()],
+        )
+        self.assertIn(
+            email.lower(),
+            [patient['email'].lower() for patient in self.client.get('/api/pacientes').get_json()],
+        )
 
         agenda = self.client.post('/api/agenda', json={
             'pacienteId': 3,
@@ -298,6 +435,18 @@ class MongoRepositoryTests(unittest.TestCase):
 
         self.assertEqual(records, [{"id": 7, "nome": "Médico"}])
         self.assertEqual(self.database.__getitem__.call_args, call("medicos"))
+
+    def test_inserts_accounts_and_appointments_into_mapped_collections(self):
+        account = {"id": 8, "nome": "Paciente"}
+        appointment = {"id": 9, "pacienteId": 8, "medicoId": 4}
+
+        self.repository.insert("usuarios", account)
+        self.collection.insert_one.assert_called_once_with(account)
+        self.assertEqual(self.database.__getitem__.call_args, call("usuarios"))
+
+        self.repository.insert("agendamentos", appointment)
+        self.collection.insert_one.assert_called_with(appointment)
+        self.assertEqual(self.database.__getitem__.call_args, call("agendamentos"))
 
     def test_maps_api_history_and_settings_to_existing_collections(self):
         self.repository.get_all("historico")
