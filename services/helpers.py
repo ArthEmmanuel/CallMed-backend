@@ -15,7 +15,8 @@ def sanitize_user(user):
     if user is None:
         return None
     response = dict(user)
-    response.pop("senha", None)
+    for field in ("senha", "password", "passwordHash", "_id", "token"):
+        response.pop(field, None)
     return response
 
 

@@ -1,4 +1,5 @@
 from repositories.data_repository import DataRepository
+from services.authorization import is_admin
 from services.appointment_service import AppointmentService
 from services.errors import ServiceError
 from services.helpers import as_id, normalize_text
@@ -81,7 +82,9 @@ class MatchmakingService:
         self.repository = repository
         self.appointments = appointments
 
-    def build_response(self, patient_id, need, symptoms=None, date=None, hour=None):
+    def build_response(
+        self, patient_id, need, symptoms=None, date=None, hour=None, actor=None
+    ):
         patients = self.repository.get_all("pacientes")
         patient_id = as_id(patient_id)
         patient = next(
@@ -90,6 +93,13 @@ class MatchmakingService:
         )
         if patient is None:
             raise ServiceError("Paciente não encontrado", 404)
+        if actor and not is_admin(actor):
+            owns_patient = (
+                str(patient.get("usuarioId", patient.get("id")))
+                == str(actor.get("id"))
+            )
+            if str(actor.get("tipo", "")).casefold() != "paciente" or not owns_patient:
+                raise ServiceError("Acesso não autorizado", 403)
 
         matched_specialties = self._get_specialty_matches(need, symptoms)
         top_specialties = [specialty for specialty, _ in matched_specialties[:3]]

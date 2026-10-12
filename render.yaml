@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: callmed-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT 'app:create_app()'
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MONGO_URI
+        sync: false
+      - key: DB_NAME
+        value: callmed
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FLASK_DEBUG
+        value: false

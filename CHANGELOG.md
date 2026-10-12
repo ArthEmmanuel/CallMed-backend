@@ -1,5 +1,49 @@
 # Log do projeto CallMed / AgendaMed
 
+## 2026-10-11 — Preparação para publicação em nuvem
+
+- Definida a arquitetura de produção: frontend no Netlify, API no Render e
+  MongoDB Atlas como banco gerenciado.
+- Preparado o backend para conectar diretamente ao MongoDB Atlas com
+  `MONGO_URI` e `DB_NAME` fornecidos como variáveis do ambiente do Render; o
+  repositório local `CallMed-Banco-de-dados` não é necessário em produção.
+- Adicionado `render.yaml` para criar o serviço WSGI do backend no Render,
+  usando Gunicorn e `/api/health` como health check.
+- Preparado `netlify.toml` para publicação do frontend estático.
+- Configurado o frontend para escolher a API local no desenvolvimento e a URL
+  HTTPS do Render em produção; a URL final deve ser confirmada após criar o
+  serviço.
+- Documentados os passos para configurar `CORS_ORIGINS`, restringir o acesso
+  do Atlas aos IPs/CIDRs de saída do Render e guardar credenciais nos painéis
+  dos provedores.
+- **Estado:** os sites/serviços ainda não foram publicados; URLs finais,
+  URI do Atlas e regras de rede continuam pendentes de configuração.
+- Validação do backend: 34 testes passaram. Sintaxe dos scripts do frontend
+  validada com `node --check`.
+
+## 2026-10-11 — Conversa mais acolhedora e funcional
+
+- Conectado o chat das páginas de paciente à triagem conversacional salva no
+  backend, com recuperação e início de conversas e atalhos para dúvidas comuns.
+- Adicionadas respostas para saudações, pedidos de esclarecimento e dúvidas
+  sobre diagnóstico, medicamentos, triagem e agendamento, sem interromper a
+  checagem de sinais de urgência.
+- Mantida a proteção: o assistente informa que não é profissional de saúde,
+  não diagnostica nem recomenda medicamentos; sinais urgentes continuam
+  direcionados ao atendimento de emergência.
+- Criado um modo de ajuda para a área da clínica, com consultas simples ao
+  cadastro de médicos e à quantidade de agendamentos, sem expor detalhes
+  pessoais de pacientes na conversa.
+- Corrigido o envio do token de autenticação do frontend para as rotas
+  protegidas da API.
+- Validação do backend e do fluxo de conversa registrados nos testes
+  automatizados.
+
+> As anotações abaixo registram o histórico inicial do projeto e descrevem a
+> configuração daquela época. Para o estado atual e o deploy, consulte o
+> README; as referências antigas a banco JSON local não descrevem a
+> arquitetura planejada para produção.
+
 ## 2026-09-21 a 2026-09-22
 
 

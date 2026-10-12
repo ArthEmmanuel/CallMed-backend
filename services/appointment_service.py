@@ -1,4 +1,9 @@
+import re
+from datetime import date as calendar_date
+from datetime import datetime
+
 from repositories.data_repository import DataRepository
+from services.authorization import is_admin, user_role
 from services.errors import ServiceError
 from services.helpers import as_id, normalize_appointment, normalize_text
 
@@ -14,7 +19,20 @@ class AppointmentService:
         records = self.repository.get_all("agendamentos")
         return [normalize_appointment(item) for item in records]
 
-    def save_appointment(self, payload, appointment_id=None, require_existing=False):
+    def list_appointments_for(self, actor):
+        records = self.repository.get_all("agendamentos")
+        if not is_admin(actor):
+            records = [
+                record for record in records
+                if self._owns_appointment(record, actor)
+            ]
+        return [normalize_appointment(item) for item in records]
+
+    def save_appointment(
+        self, payload, appointment_id=None, require_existing=False, actor=None
+    ):
+        if not isinstance(payload, dict):
+            raise ServiceError("Os dados do agendamento devem ser um objeto JSON", 400)
         records = self.repository.get_all("agendamentos")
         appointment = dict(payload)
 
@@ -41,6 +59,8 @@ class AppointmentService:
             )
             if existing is None and require_existing:
                 raise ServiceError("Agendamento não encontrado", 404)
+            if existing is not None:
+                self._authorize_appointment(existing, actor)
             appointment = {
                 **(existing or {}),
                 **appointment,
@@ -56,8 +76,7 @@ class AppointmentService:
 
         if not isinstance(patient_id, int) or not isinstance(doctor_id, int):
             raise ServiceError("Paciente e médico são obrigatórios", 400)
-        if not date or not hour:
-            raise ServiceError("Data e horário são obrigatórios", 400)
+        self._validate_date_and_time(date, hour)
 
         patient = next(
             (
@@ -80,6 +99,7 @@ class AppointmentService:
         )
         if doctor is None:
             raise ServiceError("Médico não encontrado", 404)
+        self._authorize_related(patient, doctor, actor)
 
         appointment.update(
             {
@@ -123,11 +143,11 @@ class AppointmentService:
 
         return normalize_appointment(appointment), 201 if appointment_id is None else 200
 
-    def create_legacy_appointment(self, payload):
-        appointment, _ = self.save_appointment(payload)
+    def create_legacy_appointment(self, payload, actor=None):
+        appointment, _ = self.save_appointment(payload, actor=actor)
         return appointment
 
-    def get_appointment(self, appointment_id):
+    def get_appointment(self, appointment_id, actor=None):
         appointment = next(
             (
                 item
@@ -138,9 +158,10 @@ class AppointmentService:
         )
         if appointment is None:
             raise ServiceError("Agendamento não encontrado", 404)
+        self._authorize_appointment(appointment, actor)
         return normalize_appointment(appointment)
 
-    def delete_appointment(self, appointment_id):
+    def delete_appointment(self, appointment_id, actor=None):
         appointment = next(
             (
                 item
@@ -151,6 +172,7 @@ class AppointmentService:
         )
         if appointment is None:
             raise ServiceError("Agendamento não encontrado", 404)
+        self._authorize_appointment(appointment, actor)
         self.repository.delete("agendamentos", appointment_id)
         return {
             "mensagem": "Agendamento excluído",
@@ -183,6 +205,14 @@ class AppointmentService:
         return True
 
     def get_availability(self, doctor_id, date, hours):
+        if date:
+            try:
+                datetime.strptime(date, "%Y-%m-%d")
+            except ValueError as error:
+                raise ServiceError("Data inválida; use YYYY-MM-DD", 400) from error
+        for hour in hours or DEFAULT_SLOTS:
+            if not isinstance(hour, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", hour):
+                raise ServiceError("Horário inválido; use HH:MM", 400)
         return {
             "medicoId": doctor_id,
             "data": date,
@@ -194,3 +224,62 @@ class AppointmentService:
                 for hour in (hours or DEFAULT_SLOTS)
             ],
         }
+
+    @staticmethod
+    def _validate_date_and_time(date, hour):
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError as error:
+            raise ServiceError("Data inválida; use YYYY-MM-DD", 400) from error
+        if parsed_date < calendar_date.today():
+            raise ServiceError("A data do agendamento não pode estar no passado", 400)
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", hour):
+            raise ServiceError("Horário inválido; use HH:MM", 400)
+
+    def _authorize_appointment(self, appointment, actor):
+        if actor is None or is_admin(actor):
+            return
+        if not self._owns_appointment(appointment, actor):
+            raise ServiceError("Acesso não autorizado", 403)
+
+    def _authorize_related(self, patient, doctor, actor):
+        if actor is None or is_admin(actor):
+            return
+        role = user_role(actor)
+        if role == "paciente" and self._owns_profile(patient, actor):
+            return
+        if role == "medico" and self._owns_profile(doctor, actor):
+            return
+        raise ServiceError("Acesso não autorizado", 403)
+
+    def _owns_appointment(self, appointment, actor):
+        patient_id = appointment.get("pacienteId", appointment.get("paciente_id"))
+        doctor_id = appointment.get("medicoId", appointment.get("medico_id"))
+        patient = self._find_related("pacientes", patient_id)
+        doctor = self._find_related("medicos", doctor_id)
+        return bool(
+            patient and self._owns_profile(patient, actor)
+            or doctor and self._owns_profile(doctor, actor)
+        )
+
+    def _find_related(self, collection, record_id):
+        if record_id is None:
+            return None
+        return next(
+            (
+                item
+                for item in self.repository.get_all(collection)
+                if str(item.get("id")) == str(as_id(record_id))
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _owns_profile(profile, actor):
+        return str(profile.get("usuarioId", profile.get("id"))) == str(
+            actor.get("id")
+        ) or bool(
+            profile.get("email")
+            and str(profile["email"]).casefold()
+            == str(actor.get("email", "")).casefold()
+        )
